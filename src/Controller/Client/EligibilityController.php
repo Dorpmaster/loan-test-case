@@ -1,0 +1,74 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controller\Client;
+
+use App\Domain\Client\Exception\ClientDoesNotExistException;
+use App\Domain\Client\Query\GetClientByIdQueryInterface;
+use App\Domain\Client\Service\EligibilityCheckerInterface;
+use App\Domain\Loan\Exception\DeniedLoanException;
+use App\Domain\Loan\Query\GetLoanPropositionQueryInterface;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Uid\Uuid;
+use Symfony\Component\Validator\Exception\ValidationFailedException;
+
+#[AsController]
+final readonly class EligibilityController
+{
+    public function __construct(
+        private GetClientByIdQueryInterface $getClientByIdQuery,
+        private EligibilityCheckerInterface $checker,
+        private GetLoanPropositionQueryInterface $getLoanPropositionQuery,
+        private SerializerInterface $serializer,
+    ) {
+    }
+
+    #[Route(path: '/clients/{id}/eligibility', name: 'check_eligibility', methods: ['POST'])]
+    public function __invoke(
+        Uuid $id,
+    ): Response {
+        try {
+            $client = $this->getClientByIdQuery->query($id);
+        } catch (ClientDoesNotExistException) {
+            throw new NotFoundHttpException('Client with such ID does not exist');
+        }
+
+        $violations = $this->checker->check($client);
+
+        if (count($violations) > 0) {
+            throw HttpException::fromStatusCode(
+                Response::HTTP_CONFLICT,
+                implode("\n", array_map(
+                    static fn ($e) => $e->getMessage(),
+                    iterator_to_array($violations)
+                )),
+                new ValidationFailedException($client, $violations)
+            );
+        }
+
+        try {
+            $loan = $this->getLoanPropositionQuery->query($client);
+        } catch (DeniedLoanException $exception) {
+            throw HttpException::fromStatusCode(
+                Response::HTTP_CONFLICT,
+                $exception->getMessage(),
+                $exception,
+            );
+        }
+
+        $response = new Response(
+            $this->serializer->serialize($loan, 'json'),
+            Response::HTTP_CREATED,
+        );
+
+        $response->headers->set('Content-Type', 'application/json');
+
+        return $response;
+    }
+}

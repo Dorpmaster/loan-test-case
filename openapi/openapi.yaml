@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: Loan Service API
+  description: API for managing clients and loan products, as well as checking eligibility and issuing loans.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8888/v1
+
+paths:
+  /clients:
+    post:
+      summary: Create a new client
+      description: Adds a new client to the system.
+      requestBody:
+        $ref: '#/components/requestBodies/ClientRequest'
+      responses:
+        '201':
+          description: Client successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '409':
+          description: Conflict
+
+        '422':
+          description: Unprocessable entity
+
+  /clients/{clientId}:
+    patch:
+      summary: Partially update client information
+      description: Updates specified fields of an existing client.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        $ref: '#/components/requestBodies/ClientRequest'
+      responses:
+        '200':
+          description: Client successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '404':
+          description: Client not found
+
+        '409':
+          description: Conflict
+
+        '422':
+          description: Unprocessable entity
+
+  /clients/{clientId}/eligibility:
+    post:
+      summary: Check loan eligibility
+      description: Checks if a client is eligible for a loan based on their data.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Loan eligibility result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '404':
+          description: Client not found
+        
+        '409':
+          description: Сlient was denied a loan.  
+
+  /clients/{clientId}/issue:
+    post:
+      summary: Issue loan
+      description: Issues a loan to the client if they meet the eligibility criteria and sends a notification.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        $ref: '#/components/requestBodies/LoanRequest'
+      responses:
+        '201':
+          description: Loan successfully issued and notification sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '404':
+          description: Client not found
+          
+        '409':
+          description: Сlient was denied a loan.
+
+components:
+  schemas:
+    Address:
+      required:
+        - city
+        - state
+        - zip
+      type: object
+      properties:
+        city:
+          type: string
+          description: City
+          minLength: 3
+          maxLength: 100
+        state:
+          type: string
+          description: State
+          minLength: 2
+          maxLength: 2
+        zip:
+          type: integer
+          description: ZIP code (5-digit)
+          minimum: 10000
+          maximum: 99999
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique client identifier
+          format: uuid
+        lastName:
+          type: string
+          description: Client's last name
+          minLength: 1
+          maxLength: 100
+        firstName:
+          type: string
+          description: Client's first name
+          minLength: 1
+          maxLength: 100
+        age:
+          type: integer
+          description: Client's age
+          minimum: 18
+          maximum: 60
+        address:
+          $ref: '#/components/schemas/Address'
+        ssn:
+          type: string
+          description: Social Security Number
+          pattern: '^\d{3}-\d{2}-\d{4}$' # Example SSN format
+          minLength: 9
+          maxLength: 11
+        fico:
+          type: integer
+          description: Credit score (FICO) between 300 and 850
+          minimum: 300
+          maximum: 850
+        email:
+          type: string
+          format: email
+          description: Client's email address
+        phone:
+          type: string
+          description: Client's phone number
+          minLength: 10
+          maxLength: 15
+
+    Loan:
+      type: object
+      properties:
+        productName:
+          type: string
+          description: Name of the loan product
+          minLength: 3
+          maxLength: 100
+        term:
+          type: integer
+          description: Loan term in months
+          minimum: 1
+          maximum: 60
+        interestRate:
+          type: number
+          format: float
+          description: Interest rate
+          minimum: 0.01
+          maximum: 100
+        amount:
+          type: number
+          format: float
+          description: Loan amount
+          minimum: 0.01
+
+  requestBodies:
+    ClientRequest:
+      description: Request body for creating/updating the client
+      required: true
+      content:
+        application/json:
+          schema:
+            required:
+              - lastName
+              - firstName
+              - age
+              - address
+              - ssn
+              - fico
+              - email
+              - phone
+            type: object
+            properties:
+              lastName:
+                type: string
+                description: Client's last name
+                minLength: 1
+                maxLength: 100
+              firstName:
+                type: string
+                description: Client's first name
+                minLength: 1
+                maxLength: 100
+              age:
+                type: integer
+                description: Client's age
+                minimum: 18
+                maximum: 60
+              address:
+                $ref: '#/components/schemas/Address'
+              ssn:
+                type: string
+                description: Social Security Number
+                pattern: '^\d{3}-\d{2}-\d{4}$' # Example SSN format
+                minLength: 9
+                maxLength: 11
+              fico:
+                type: integer
+                description: Credit score (FICO) between 300 and 850
+                minimum: 300
+                maximum: 850
+              email:
+                type: string
+                format: email
+                description: Client's email address
+              phone:
+                type: string
+                description: Client's phone number
+                minLength: 10
+                maxLength: 15
+
+    LoanRequest:
+      description: Request body for issuing the loan
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              propositionId:
+                type: string
+                description: Proposition ID
+                format: uuid

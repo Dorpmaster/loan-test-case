@@ -1,0 +1,46 @@
+services:
+  php:
+    build:
+      context: .
+    depends_on:
+      init-migrations:
+        condition: service_completed_successfully
+    ports:
+      - "8888:80"
+    develop:
+      watch:
+        - path: composer.json
+          action: rebuild
+        - path: composer.lock
+          action: rebuild
+        - path: .
+          target: /srv/app
+          action: sync
+          ignore:
+            - var/
+            - vendor/
+            - compose.yml
+            - Dockerfile
+            - Makefile
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: "secret"
+      POSTGRES_USER: "user"
+      POSTGRES_DB: "loans"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  init-migrations:
+    build:
+      context: .
+    command: [ 'composer', 'apply-migrations' ]
+    depends_on:
+      db:
+        condition: service_healthy
